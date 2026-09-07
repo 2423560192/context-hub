@@ -1,6 +1,6 @@
 # Content format
 
-> [English](content-format.en.md)
+> [中文](content-format.md)
 
 ## Packaged skills
 

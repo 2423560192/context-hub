@@ -1,5 +1,7 @@
 # 进阶使用与维护参考
 
+> [English](advanced.en.md)
+
 > README 只保留"快速上手"，本文收纳其余内容：部署模式、逐客户端完整接入、Windows 开机自启、Trae 主动检索、FAQ、维护者开发命令。技能/文档格式规范见 [content-format.md](content-format.md)，架构见 [architecture.md](architecture.md)。
 
 ## 部署模式速查
