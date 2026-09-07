@@ -293,6 +293,64 @@ url = "http://127.0.0.1:8765/mcp"
 
 客户端配置参考：[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Cursor MCP](https://prod.cursor.com/docs/mcp)、[Trae MCP](https://docs.trae.cn/ide_add-mcp-servers)。
 
+## Windows 开机自启动（共享 HTTP 模式）
+
+如果只是**自己一台电脑**使用，推荐跑一个随登录自启的共享 HTTP 服务（隐藏窗口），所有 Agent 填同一个网址即可，无需为每个客户端单独配置 stdio。
+
+### 第一步：准备
+
+```bash
+cd /d D:\context-hub          # 替换为你的引擎目录
+uv sync                       # 仅首次
+```
+
+确认知识库目录存在（任意含 `knowledge/skills/` 的仓库/文件夹，如 `D:\my-skills`）。仓库自带的 [scripts/start-skillhub-mcp.bat](scripts/start-skillhub-mcp.bat) 接受 `[知识库路径] [端口]` 两个参数。
+
+### 第二步：创建静默启动脚本
+
+新建 `scripts\start-skillhub.vbs`（把两处路径换成你自己的）：
+
+```vbs
+Set shell = CreateObject("WScript.Shell")
+shell.Run """D:\context-hub\scripts\start-skillhub-mcp.bat"" D:\my-skills 8765", 0, False
+```
+
+`0` 表示隐藏窗口，`False` 表示不等待脚本结束。
+
+### 第三步：放入"启动"文件夹（无需管理员）
+
+在 PowerShell 中执行：
+
+```powershell
+$startup = [Environment]::GetFolderPath('Startup')
+Copy-Item D:\context-hub\scripts\start-skillhub.vbs "$startup\SkillHub-MCP.vbs"
+```
+
+下次**登录 Windows 后**会自动在后台启动服务。立即验证：
+
+```powershell
+Start-Process wscript.exe -ArgumentList '"D:\context-hub\scripts\start-skillhub.vbs"'
+Get-NetTCPConnection -LocalPort 8765 -State Listen   # 看到 LISTENING 即成功
+```
+
+### 使用与维护
+
+所有 Agent 只配置一个 HTTP MCP：
+
+```json
+{ "mcpServers": { "skillhub": { "type": "http", "url": "http://127.0.0.1:8765/mcp" } } }
+```
+
+```powershell
+# 停掉服务（重启后会自动再起）
+taskkill /PID <PID> /F
+
+# 彻底取消开机自启
+Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\SkillHub-MCP.vbs"
+```
+
+其他可选自启方式：任务计划程序（需管理员）、或用 NSSM 注册成 Windows 服务（无需登录即可运行、崩溃自动重启）。若要让局域网内其他机器访问，把 bat 参数中的 `--host` 改为 `0.0.0.0` 并放行防火墙端口。
+
 ## 开发与验证
 
 ```bash
