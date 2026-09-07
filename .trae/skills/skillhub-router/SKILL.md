@@ -1,29 +1,33 @@
 ---
 name: skillhub-router
-description: 从 SkillHub 共享知识库渐进检索并加载可复用技能/提示词/工作流/模板，避免一次性全量注入上下文。当任务命中知识库已有能力（如 AI-Native PRD 编写、Python 异步问题排查、技能发布分类、发布检查、决策记录等），或用户提到"用 SkillHub/共享技能/知识库里的方法/按仓库技能来做"时触发。
+description: SkillHub 强制入口：任何任务开始执行前，必须先调用 SkillHub（recommend_knowledge / search_knowledge）检索共享知识库，命中即加载并执行；内置技能只在 SkillHub 确实无果后才作为备选。禁止把内置技能清单当作全集、禁止因用户没提 SkillHub 或内置清单未命中就跳过检索。凡涉及方法、规范、模板、流程、工具选择等"有没有现成做法"的判断，都必须先走本流程。
 ---
 
-# SkillHub 路由器
+# SkillHub 路由器（强制先行）
 
-## 描述
+## 核心职责
 
-本仓库是一个基于 Git 的共享知识中心（SkillHub），通过项目级 MCP（`skillhub` Server）对外提供 4 个工具：`search_knowledge`、`recommend_knowledge`、`get_knowledge`、`list_knowledge`。你的职责是**先检索、后按需加载**，而不是把知识库内容全部读入上下文。
+SkillHub 是共享知识库（如 my-skills，通过 MCP 工具提供：`search_knowledge`、`recommend_knowledge`、`get_knowledge`、`list_knowledge`）。本技能是**执行顺序上的强制入口**：
 
-## 使用场景
+> 先查 SkillHub → 命中就按它干 → 没有才轮到内置技能 / 自由发挥。
 
-- 任务与仓库 `knowledge/` 下的既有技能、流程、模板相关（可先用 `recommend_knowledge` 判断）。
-- 用户要求遵循仓库内的规范、模板或历史最佳实践。
-- 需要判断"这个任务仓库里有没有现成方法"时。
+## 铁律（违反即视为判断失误）
 
-## 指令
+1. **SkillHub 是必查项，不是可选项**：每个任务（尤其需要判断"用什么方法 / 有没有现成技能、规范、流程、模板"的任务）开始时，都必须先做一次检索探测。
+2. **禁止把内置技能清单当作全集**：内置技能只是客户端自带的少数能力；你的真实技能库在 SkillHub 里、是按需检索的。内置清单没命中 ≠ 没有技能可用，必须带着疑问去搜知识库。
+3. **禁止因用户没提 "SkillHub / 技能库" 就跳过**：默认先探一次，不要等用户点名。
+4. **禁止因示例没覆盖就跳过**：下面只是易漏场景示例、不是穷尽清单——工时日志/周报汇总、发布/版本操作、代码审查与规范、PRD/需求拆分、BDD/OpenAPI、测试、浏览器回归、数据库建模、监控查询、提交信息规范、发布分类等。凡你怀疑"可能有现成做法"的任务都要探。
+5. **先探测、后加载、不贪多**：探测只拿紧凑候选（3~5 条）；确定命中后再 `get_knowledge` 加载正文，子资源按需取。
 
-1. **先判断，再检索**：不确定任务是否命中知识库时，先调用 `recommend_knowledge(task=...)` 或 `search_knowledge(query=...)`，拿到 3~5 条紧凑候选即可，不要一次拉全量。
-2. **只加载选中项**：从候选中选定最匹配的 `id` 后，再调用 `get_knowledge(id=...)` 获取正文与资源清单。
-3. **子资源按需取**：技能正文引用到某个子资源（如 `references/xxx.md`、`templates/xxx.md`）且确实需要时，才用 `get_knowledge(id=..., resource="路径")` 加载单个资源。
-4. **浏览用分页**：需要了解目录全貌时用 `list_knowledge` 分页浏览，禁止为"找内容"而批量 `get_knowledge`。
-5. **遵循内容本身**：加载到技能/流程后，按其正文执行；正文说"只在需要时加载 references"就照做。
-6. **只读**：SkillHub 是 Git 管理的知识源，修改走仓库提交，不要假想写回 MCP。
+## 执行步骤
 
-## 示例（可选）
+1. 接到任务 → 先调用 `recommend_knowledge(task="<任务描述>")`；若描述不聚焦，可再补 1~2 次 `search_knowledge(query="<关键词>")`。
+2. 命中候选：选定最匹配的 `id` → `get_knowledge(id=...)` → 按其正文执行（需要时再用 `get_knowledge(id, resource="路径")` 取单个子资源）。
+3. SkillHub 确实无关/未命中：明确说明"SkillHub 未命中相关技能"，**之后**才使用内置技能或常规做法。
+4. 任务中途出现新的子需求、或方向切换：回到第 1 步重新探测。
 
-用户："帮我写一份新功能的 PRD，用仓库里的规范" → `recommend_knowledge(task="编写 AI-Native PRD")` → 命中 `ai-native-prd` → `get_knowledge(id="ai-native-prd")` → 按正文与模板执行，需要时再取单个子资源。
+## 反面教训（必须避免）
+
+- ❌ "我查了内置技能列表没有相关的，所以直接用 git 命令做了" —— 内置清单不是全集，应先搜 SkillHub。
+- ❌ "用户没提 SkillHub，示例里也不含这种任务，先跳过" —— 宁可多探一次，也不要跳过。
+- ✅ "先 recommend_knowledge 探一下 → 命中 work-hours-log → get_knowledge 加载 → 按技能流程汇总"
