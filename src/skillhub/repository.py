@@ -70,28 +70,7 @@ class KnowledgeRepository:
         skill_root = self.knowledge_root / "skills"
         skill_entrypoints: set[Path] = set()
         if skill_root.exists():
-            for skill_dir in sorted(
-                path for path in skill_root.iterdir() if path.is_dir() and not path.name.startswith(".")
-            ):
-                entrypoint = skill_dir / "SKILL.md"
-                if entrypoint.is_file():
-                    skill_entrypoints.add(entrypoint)
-                else:
-                    issues.append(
-                        ValidationIssue(
-                            skill_dir.relative_to(self.root).as_posix(),
-                            "skill directory must contain SKILL.md",
-                        )
-                    )
-            for loose_file in sorted(
-                path for path in skill_root.iterdir() if path.is_file() and not path.name.startswith(".")
-            ):
-                issues.append(
-                    ValidationIssue(
-                        loose_file.relative_to(self.root).as_posix(),
-                        "skills must use the skills/{skill-name}/SKILL.md package structure",
-                    )
-                )
+            skill_entrypoints = self._collect_skill_packages(skill_root, issues)
         candidates: list[tuple[Path, bool]] = [(path, True) for path in sorted(skill_entrypoints)]
         for path in sorted(self.knowledge_root.rglob("*.md")):
             if not path.is_file():
@@ -121,6 +100,76 @@ class KnowledgeRepository:
             seen_ids[document.id] = document.relative_path
             documents.append(document)
         return documents, issues
+
+    def _collect_skill_packages(self, skill_root: Path, issues: list[ValidationIssue]) -> set[Path]:
+        """Discover every skill package under ``skills/``.
+
+        A skill package is any directory that directly contains ``SKILL.md``.
+        Directories above a package act as free-form category groups, so both
+        ``skills/{skill-name}/`` and ``skills/{category}/.../{skill-name}/``
+        layouts are accepted. A non-package directory that holds markdown (or
+        any file without child packages) is reported as a malformed package.
+        """
+        entrypoints: set[Path] = set()
+
+        def visit(directory: Path) -> None:
+            try:
+                children = [
+                    entry for entry in sorted(directory.iterdir()) if not entry.name.startswith(".")
+                ]
+            except OSError:
+                return
+            directories: list[Path] = []
+            direct_markdown: list[Path] = []
+            has_entrypoint = False
+            for entry in children:
+                if entry.is_dir():
+                    directories.append(entry)
+                elif entry.name == "SKILL.md":
+                    has_entrypoint = True
+                elif entry.suffix.lower() == ".md":
+                    direct_markdown.append(entry)
+            if has_entrypoint:
+                entrypoints.add(directory / "SKILL.md")
+                return
+            if direct_markdown:
+                if directory == skill_root:
+                    for markdown in direct_markdown:
+                        issues.append(
+                            ValidationIssue(
+                                markdown.relative_to(self.root).as_posix(),
+                                "skills must use the skills/{skill-name}/SKILL.md package structure",
+                            )
+                        )
+                else:
+                    issues.append(
+                        ValidationIssue(
+                            directory.relative_to(self.root).as_posix(),
+                            "skill directory must contain SKILL.md",
+                        )
+                    )
+            elif not directories and children:
+                issues.append(
+                    ValidationIssue(
+                        directory.relative_to(self.root).as_posix(),
+                        "skill directory must contain SKILL.md",
+                    )
+                )
+            for child in directories:
+                visit(child)
+
+        visit(skill_root)
+        return entrypoints
+
+    def _skill_category_tags(self, package_root: Path) -> tuple[str, ...]:
+        """Return category directory names above the package leaf, outermost first."""
+        skill_root = (self.knowledge_root / "skills").resolve()
+        try:
+            relative = package_root.resolve().relative_to(skill_root)
+        except ValueError:
+            return ()
+        parts = relative.parts
+        return tuple(parts[:-1]) if len(parts) > 1 else ()
 
     def parse_skill(self, path: Path) -> tuple[KnowledgeDocument | None, list[ValidationIssue]]:
         relative = path.resolve().relative_to(self.root).as_posix()
@@ -176,6 +225,8 @@ class KnowledgeRepository:
                 issues.append(ValidationIssue(relative, "must be a non-empty string when present", "category"))
             elif category.strip() not in tags:
                 tags.insert(0, category.strip())
+        category_tags = [tag for tag in self._skill_category_tags(path.parent) if tag not in tags]
+        tags = category_tags + tags
         keywords = _string_list(metadata.get("keywords"), "keywords", relative, issues)
         resources = self._skill_resources(path.parent)
         resource_paths = {resource.path for resource in resources}

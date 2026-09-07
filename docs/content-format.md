@@ -13,6 +13,21 @@ knowledge/skills/
     └── templates/        # optional
 ```
 
+### Category directories
+
+Skills may also be grouped under free-form category directories (any depth, any name including Chinese). A skill package is any directory that directly contains `SKILL.md`; directories above it act purely as category groups:
+
+```text
+knowledge/skills/
+├── {skill-name}/                    # flat package (as above)
+└── {category}/.../{skill-name}/     # nested package with category path
+    └── SKILL.md
+```
+
+- `name` and the MCP id always come from the leaf directory name and must remain ASCII (letters/digits/`.`/`_`/`/`/`-`, starting alphanumeric).
+- Category directory names are indexed as tags in order (outermost first), so `search`/`list` tag filters work across category groups.
+- A non-package directory containing markdown directly (or holding files but no child packages) is reported as malformed. Empty directories are allowed as placeholders.
+
 `SKILL.md` is UTF-8 Markdown with YAML front matter.
 
 | Field | Required | Type | Notes |

@@ -74,3 +74,49 @@ def test_loose_skill_markdown_is_rejected(knowledge_repo: Path) -> None:
     loose.write_text("not a packaged skill", encoding="utf-8")
     _, issues = KnowledgeRepository(knowledge_repo).scan()
     assert any("skills/{skill-name}/SKILL.md" in issue.message for issue in issues)
+
+
+def _write_nested_skill(repo: Path, *segments: str, name: str | None = None) -> None:
+    package = repo.joinpath("knowledge", "skills", *segments)
+    package.mkdir(parents=True)
+    skill_name = name or segments[-1]
+    (package / "SKILL.md").write_text(
+        f"""---
+name: {skill_name}
+description: 嵌套分类技能，用于测试中文目录分类。
+description_zh: 嵌套分类技能，用于测试中文目录分类。
+description_en: A nested skill used to test Chinese category directories.
+version: 1.0.0
+author: Test Author
+---
+# Nested
+
+Body with details.
+""",
+        encoding="utf-8",
+    )
+
+
+def test_nested_chinese_category_skill_is_discovered(knowledge_repo: Path) -> None:
+    _write_nested_skill(knowledge_repo, "前端测试", "登录", "login-check")
+    documents, issues = KnowledgeRepository(knowledge_repo).scan()
+    assert not issues
+    ids = [document.id for document in documents]
+    assert "login-check" in ids and "review" in ids
+    nested = next(document for document in documents if document.id == "login-check")
+    assert nested.tags[:2] == ("前端测试", "登录")
+    assert "knowledge/skills/前端测试/登录/login-check/SKILL.md" in nested.relative_path
+
+
+def test_empty_category_directory_is_allowed(knowledge_repo: Path) -> None:
+    (knowledge_repo / "knowledge" / "skills" / "待整理").mkdir(parents=True)
+    documents, issues = KnowledgeRepository(knowledge_repo).scan()
+    assert not issues
+    assert [document.id for document in documents] == ["review"]
+
+
+def test_nested_skill_name_must_match_leaf_directory(knowledge_repo: Path) -> None:
+    _write_nested_skill(knowledge_repo, "测试", "regression", name="wrong-name")
+    documents, issues = KnowledgeRepository(knowledge_repo).scan()
+    assert "regression" not in [document.id for document in documents]
+    assert any("must match the skill directory" in issue.message for issue in issues)
