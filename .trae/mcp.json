@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "skillhub": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "skillhub-mcp",
+        "--repo",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}

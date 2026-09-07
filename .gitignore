@@ -8,6 +8,5 @@ dist/
 build/
 *.egg-info/
 .skillhub/
-.trae/
 .mcp.json
 
