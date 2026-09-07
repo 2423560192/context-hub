@@ -10,3 +10,5 @@ build/
 .skillhub/
 .mcp.json
 
+
+scripts/autostart-skillhub.vbs
