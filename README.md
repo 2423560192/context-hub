@@ -92,6 +92,7 @@ knowledge/skills/
 ```
 
 - `name`（即 MCP 返回的 id）始终取技能所在的**叶子目录名**，仍要求 ASCII（字母/数字开头，可含 `.` `_` `/` `-`）。
+
 - 分类目录名会自动作为 tags 参与索引与过滤（从外层到内层），如 `--tag 后端开发` 可搜到其下所有技能。
 
 `SKILL.md` 示例：
@@ -172,7 +173,7 @@ uv run skillhub --repo . status
 
 ## 引擎与内容解耦：指向你自己的知识库
 
-SkillHub 的代码（引擎）与内容（`knowledge/`）是分离的：本仓库里的 `knowledge/` 只是示例内容，你可以让服务指向**任意一个含** **`knowledge/`** **目录的仓库或文件夹**，包括你自己的私有知识库。
+SkillHub 的代码（引擎）与内容（`knowledge/`）是分离的：本仓库**不内置技能内容**（`knowledge/` 目录为空），clone 后请把服务指向你自己的知识库——任意一个含 `knowledge/` 目录的仓库或文件夹，包括你自己的私有知识库。
 
 三种指定方式（优先级：命令行参数 > 环境变量 > 默认值）：
 
@@ -268,6 +269,8 @@ codex mcp add skillhub -- uv --directory /ABSOLUTE/PATH/context-hub run skillhub
 若改用全局/手动配置，请打开 MCP 管理面板，选择原生 JSON 配置，填入 `examples/mcp/trae.json` 中的 stdio 配置并替换为本地绝对路径。
 
 可直接复制的配置模板见 [examples/mcp](examples/mcp)。
+
+想让**其他项目**也用同一套 SkillHub：把本仓库 `.trae/skills/skillhub-router/` 整个文件夹复制到目标项目根目录，并把 MCP 配置里的 `--repo` 指向你的知识库（或把它安装为 Trae 全局技能）。注意本仓库 `.trae/mcp.json` 的 `${workspaceFolder}` 指向本仓库，clone 后请改为你自己的知识库路径。
 
 ### 一个共享的 HTTP 进程
 
