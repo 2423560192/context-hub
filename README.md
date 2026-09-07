@@ -1,5 +1,7 @@
 # SkillHub · AI 技能中心引擎
 
+> [English](README.en.md)
+
 把 Markdown 技能整理成一个**可检索的知识库**，通过 MCP 提供给 Claude Code、Trae、Codex、Cursor 等 AI 客户端**先检索、再按需加载**——技能再多，也不会把上下文撑爆。
 
 > 本仓库只含**引擎代码**。技能内容放在你自己的知识库仓库/文件夹里（引擎自带 `knowledge/` 分类骨架，可直接用）。引擎用 `--repo` 指向哪里，就服务哪里的内容。
