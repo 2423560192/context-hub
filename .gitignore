@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.skillhub/
+.trae/
+.mcp.json
+

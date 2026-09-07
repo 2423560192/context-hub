@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-skillhub"
+version = "0.1.0"
+description = "Git-backed knowledge center and MCP server for AI agents"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SkillHub Contributors" }]
+dependencies = [
+  "mcp[cli]>=1.25,<2",
+  "PyYAML>=6.0.2,<7",
+  "watchdog>=6.0,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
+]
+
+[project.scripts]
+skillhub = "skillhub.cli:main"
+skillhub-mcp = "skillhub.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skillhub"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+

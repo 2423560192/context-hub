@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "skillhub": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/context-hub",
+        "run",
+        "skillhub-mcp",
+        "--repo",
+        "/ABSOLUTE/PATH/context-hub"
+      ]
+    }
+  }
+}
+
