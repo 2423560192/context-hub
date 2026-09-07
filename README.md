@@ -25,6 +25,8 @@
 
 - [Features](#features)
 
+- [Usage](#usage)
+
 - [Architecture](#architecture)
 
 - [License](#license)
@@ -44,6 +46,27 @@
 - **Bilingual retrieval** — English token search and Chinese character/bigram search with type and tag filters.
 
 - **One engine, many shapes** — stdio servers launched by each client, or one shared HTTP server on your LAN or behind a reverse proxy.
+
+## Usage
+
+Start from scratch in about three minutes:
+
+```bash
+git clone <your-engine-repo-url> context-hub
+cd context-hub
+uv sync                                   # install (uv is the only dependency)
+uv run skillhub-mcp --repo . --transport streamable-http --port 8765
+```
+
+The service is now at `http://127.0.0.1:8765/mcp`. Add an MCP server to any AI client with the same URL:
+
+```json
+{ "mcpServers": { "skillhub": { "type": "http", "url": "http://127.0.0.1:8765/mcp" } } }
+```
+
+Skills are directories under `knowledge/skills/{skill-name}/SKILL.md` (the directory name is the skill id; the engine ships a category skeleton you can drop skills into, or point `--repo` at your own knowledge repository). Ask your agent to `search_knowledge` first and `get_knowledge(id)` for the best match — a skill only becomes visible when actively retrieved.
+
+Client-specific configs (Claude Code / Codex / Cursor / Trae), the full CLI and MCP tool reference, Windows autostart and FAQs: [doc/doc.md](doc/doc.md). Skill format spec: [docs/content-format.md](docs/content-format.md).
 
 ## Architecture
 

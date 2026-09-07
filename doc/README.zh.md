@@ -25,6 +25,7 @@
 ## 目录
 
 - [功能特点](#功能特点)
+- [使用](#使用)
 - [架构](#架构)
 - [授权](#授权)
 - [作者](#作者)
@@ -38,6 +39,27 @@
 - **先检索再加载** — 检索只返回紧凑候选，命中才取正文；技能子资源有清单，需要时再单独取。
 - **中英双语检索** — 英文 token 与中文单字/双字检索，支持类型与标签过滤。
 - **一份引擎多种形态** — 可被各客户端以 stdio 拉起，也可常驻共享 HTTP 供局域网或反代后共用。
+
+## 使用
+
+从零开始约 3 分钟：
+
+```bash
+git clone <你的引擎仓库地址> context-hub
+cd context-hub
+uv sync                                   # 安装（唯一依赖 uv）
+uv run skillhub-mcp --repo . --transport streamable-http --port 8765
+```
+
+服务地址即 `http://127.0.0.1:8765/mcp`。给任意 AI 客户端添加 MCP 服务器并填同一个地址：
+
+```json
+{ "mcpServers": { "skillhub": { "type": "http", "url": "http://127.0.0.1:8765/mcp" } } }
+```
+
+技能放在 `knowledge/skills/{技能名}/SKILL.md`（目录名就是技能 id；引擎自带分类骨架可直接放，也可把 `--repo` 指向你自己的知识库仓库）。让 Agent 先 `search_knowledge` 检索、再对最佳命中的 id 调 `get_knowledge(id)`——技能只有被主动检索到才会可见。
+
+各客户端接入（Claude Code / Codex / Cursor / Trae）、CLI 与 MCP 工具完整参考、Windows 自启与 FAQ：见 [doc.zh.md](doc.zh.md)。技能格式规范：[../docs/content-format.md](../docs/content-format.md)。
 
 ## 架构
 
