@@ -9,7 +9,7 @@
         "run",
         "skillhub-mcp",
         "--repo",
-        "/ABSOLUTE/PATH/context-hub"
+        "/ABSOLUTE/PATH/your-knowledge"
       ]
     }
   }

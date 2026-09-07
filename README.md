@@ -1,213 +1,182 @@
-# AI 知识中心 / SkillHub
+# SkillHub · AI 技能中心引擎
 
-SkillHub 是一个面向 Claude Code、Codex、Trae、Cursor 以及其他任意 MCP 客户端的轻量级、基于 Git 的知识中心。Markdown 文件是唯一的事实来源（Single Source of Truth）。服务端维护一份可随时重建的内存索引，并提供节省 Token 的两步检索流程：
-
-```text
-search_knowledge / recommend_knowledge  ->  紧凑的候选结果
-get_knowledge                          ->  一篇完整文档
-```
-
-MVP 刻意不包含数据库、Embedding 服务和 Web 界面，这些能力后续可以在现有 repository 与 index 接口之上逐步增加。
-
-## 架构
+SkillHub 是一个**基于 Git 的 AI 技能/知识中心引擎**：把 Markdown 技能包管理在仓库里，通过 MCP 提供给 Claude Code、Codex、Trae、Cursor 等任意客户端 **先检索、再按需加载**，避免技能越来越多把上下文塞爆。
 
 ```text
-Git 仓库
-  └─ knowledge/
-       ├─ skills/{skill-name}/SKILL.md + 可选子资源
-       └─ prompts/workflows/templates/rules/*.md
-       │
-       ▼
-KnowledgeRepository ── 解析 + 校验 + 文件指纹
-       │
-       ▼
-KnowledgeIndex ─────── 原子更新的内存词法索引
-       │                         ▲
-       │                         │ 文件监听 + 读取时新鲜度检查
-       ▼                         │
-KnowledgeService ────────────────┘
-       ├─ CLI: validate / search / reindex / status
-       └─ MCP: search / get / list / recommend
+search_knowledge / recommend_knowledge  →  紧凑候选（只回元数据）
+get_knowledge                           →  一篇完整文档（按需取）
 ```
 
-设计决策：
+> 本仓库只含**引擎代码**，不含技能内容（`knowledge/` 只有目录骨架）。技能内容放在你自己的知识库仓库/文件夹里，引擎可以指向任意位置——见下方「知识库从哪来」。
 
-- **以 Git 为准。** 索引派生自内存且可随时重建。
+## 它能做什么
 
-- **每次调用都新鲜。** 文件系统监听器会在任何技能包变更后主动重建索引；每次读取还会比对路径、修改时间和文件大小，即使漏掉监听事件也不会读到过期内容。
+- 一个 Git 仓库 = 一个技能库（Markdown 是唯一事实来源），索引可随时重建
+- 文件改动自动刷新（监听 + 读取时校验），`git pull` 后无需重启
+- 技能包遵循 WorkBuddy 结构，支持**多级/中文分类目录**（目录名自动成为可检索 tag）
+- 中英文检索（英文 token + 中文单字/双字），可配类型/标签过滤
+- 三种运行形态：本机共享 HTTP、各客户端 stdio 自启、服务器常驻共享
 
-- **MCP 响应默认短小。** `search`、`recommend`、`list` 只返回元数据摘要。`get_knowledge(id)` 返回所选 `SKILL.md` 正文和资源清单；`get_knowledge(id, resource)` 只返回指定的某一个子资源。
+## 一、5 分钟上手
 
-- **可移植的路径与运行时。** 实现使用 `pathlib`、UTF-8、`uv` 和 `watchdog`，兼容 Windows、macOS、Linux。
+### 0. 准备
 
-- **扩展点明确。** 未来的向量索引只需实现 index 契约；Web 界面只调用 service 层。两者都不需要改动文档文件或 MCP 工具名。
+安装 [uv](https://docs.astral.sh/uv/)（唯一依赖）。
 
-更多细节见 [docs/architecture.md](docs/architecture.md) 与 [docs/content-format.md](docs/content-format.md)。
-
-## 快速开始
-
-先安装 [uv](https://docs.astral.sh/uv/)，然后在仓库目录下执行：
+### 1. 拉取引擎并安装
 
 ```bash
-uv sync --extra dev
-uv run skillhub validate
-uv run skillhub search "code review"
-uv run skillhub status
+git clone <你的引擎仓库地址> context-hub
+cd context-hub
+uv sync                # 首次执行，装依赖
 ```
 
-通过 stdio 启动本地 MCP 服务器：
+### 2. 准备知识库（三选一）
 
-```bash
-uv run skillhub-mcp --repo /absolute/path/to/context-hub
-```
-
-或者通过 Streamable HTTP 启动一个共享的 MCP 进程：
-
-```bash
-uv run skillhub-mcp --repo /absolute/path/to/context-hub --transport streamable-http --host 127.0.0.1 --port 8765
-```
-
-共享端点为 `http://127.0.0.1:8765/mcp`。MVP 没有鉴权，因此请将其绑定到回环地址，除非你在前面架设了带鉴权的反向代理。
-
-## 内容格式
-
-技能遵循 [WorkBuddy 技能包结构](https://open.workbuddy.cn/docs/skill#%E6%8A%80%E8%83%BD%E5%9F%BA%E7%A1%80%E7%BB%93%E6%9E%84)：
+引擎与内容是解耦的，`--repo` 指向哪个仓库，服务就提供哪里的内容：
 
 ```text
-knowledge/skills/
-└── {skill-name}/
-    ├── SKILL.md              # 必需
-    ├── references/           # 可选的参考资料
-    ├── scripts/              # 可选的可执行辅助脚本
-    └── templates/            # 可选的可复用模板
+A. 已有符合规范的知识库（推荐）
+   git clone <你的技能仓库> my-skills     # 或指向你现有的 knowledge 仓库
+
+B. 用本仓库骨架自建
+   本仓库 knowledge/skills/ 已预置分类目录（需求与文档/编码开发/可视化/效率工具/技能发布/项目/）
+   把技能包目录 {skill-name}/SKILL.md 放进对应分类即可
+
+C. 从零建
+   mkdir -p my-skills/knowledge/skills/demo
+   写一个 SKILL.md（格式见「技能格式」），有 1 个技能就能跑
 ```
 
-技能也支持放在任意层级的分类目录下（目录名随意，含中文）；含 `SKILL.md` 的目录才是技能包，其上各层目录只是分类分组。例如：
+校验内容合法（有错误会退出码 1，坏文件不进索引）：
+
+```bash
+uv run skillhub --repo /path/to/your-knowledge validate
+# 期望: {"valid": true, "documents": N, "issues": []}
+```
+
+### 3. 启动服务
+
+**推荐：本机共享 HTTP（一个常驻服务，所有客户端共用）：**
+
+```bash
+uv run skillhub-mcp --repo /path/to/your-knowledge \
+    --transport streamable-http --host 127.0.0.1 --port 8765
+```
+
+Windows 也可用现成脚本：`scripts\start-skillhub-mcp.bat <知识库路径> 8765`。
+想要开机自启（隐藏窗口、登录即跑）见「Windows 开机自启动」。
+
+**或者：stdio（由客户端自己拉起），见「客户端接入」各客户端配置。**
+
+### 4. 客户端接入
+
+接入后所有 Agent 只需填一个地址：`http://127.0.0.1:8765/mcp`（HTTP 模式）：
+
+```json
+{ "mcpServers": { "skillhub": { "type": "http", "url": "http://127.0.0.1:8765/mcp" } } }
+```
+
+- Claude Code / Cursor：把上面 JSON 写进项目 `.mcp.json` / `.cursor/mcp.json`
+- Trae：**设置 → MCP** 手动添加 HTTP 服务器填该地址；想要 Agent"主动去搜"，再装一个路由技能（见「Trae：让 Agent 主动检索」）
+- 完整逐客户端说明与现成模板：见「客户端接入参考」与 [examples/mcp](examples/mcp)
+
+### 5. 验证
+
+```bash
+# 方式一：命令行冒烟（需服务已在 8765 运行）
+uv run python scripts/smoke_http.py --url http://127.0.0.1:8765/mcp --query "发布"
+```
 
 ```text
-knowledge/skills/
-├── {skill-name}/                  # 扁平技能包
-└── 后端开发/数据库/{skill-name}/   # 带中文分类路径的技能包
-    └── SKILL.md
+# 方式二：直接问你的 Agent
+你有哪些 MCP 工具？请调用 search_knowledge 搜一下“发布”，把命中的 id 告诉我。
 ```
 
-- `name`（即 MCP 返回的 id）始终取技能所在的**叶子目录名**，仍要求 ASCII（字母/数字开头，可含 `.` `_` `/` `-`）。
+能列出 `search_knowledge / get_knowledge / list_knowledge / recommend_knowledge` 并返回结果即成功。
 
-- 分类目录名会自动作为 tags 参与索引与过滤（从外层到内层），如 `--tag 后端开发` 可搜到其下所有技能。
+## 技能格式与目录规范
 
-`SKILL.md` 示例：
+- 每个技能是一个独立目录 `{skill-name}/SKILL.md`，可带 `references/` `scripts/` `templates/` 子资源
+- 分类目录随意（可中文、可多层），技能包可以嵌套在任何层：`skills/{分类}/.../{skill-name}/SKILL.md`，分类目录名自动成为 tags
+- 必填 frontmatter：`name`、`description`、`description_zh`、`description_en`、`version`、`author`；`name` 必须等于叶子目录名且全库唯一（ASCII）
+- ⚠️ 值里出现英文冒号 `: ` 时必须加引号，否则 YAML 报错、该技能不生效
 
 ```markdown
 ---
 name: code-review
-display_name: 代码审查
-display_name_en: Code Review
-description: Review changes for correctness and security. Trigger for code review requests.
-description_zh: 检查代码正确性、安全问题和回归风险。
-description_en: Review code for correctness, security issues, and regressions.
-category: software-development
+description: 检查代码正确性与安全风险，当用户要求 code review 时触发。
+description_zh: 代码安全审查与回归风险检查。
+description_en: Review code for security and regressions.
 version: 1.0.0
 author: Your Name
+category: software-development
 ---
-# Instructions
-
-Full skill instructions go here. Load details from @references/checklist.md only when needed.
+正文写真正要注入 Agent 的指令；参考资料用 @references/xxx.md 按需加载。
 ```
 
-对技能而言，`description`、`description_zh`、`description_en`、`version` 和 `author` 为必填项。省略 `name` 时默认取技能目录名；填写时必须与目录名一致。支持 `category`、`display_name`、`display_name_en`、`allowed-tools`、`disable-model-invocation` 和 `user-invocable`。MCP 返回的技能 ID 即其 `name`，例如 `code-review`。
+完整规范（其余类型 prompt/workflow/template/rule、tags/keywords、子资源引用）见 [docs/content-format.md](docs/content-format.md)。
 
-其余知识类型沿用 MVP 的单 Markdown 文件格式，包含 `id`、`type`、`title` 和 `description`。整体目录仍支持以下类型：
+## MCP 工具用法
 
-- `skill`
+| 工具 | 用途 | 返回完整正文 |
+| --- | --- | --- |
+| `search_knowledge(query, types?, tags?, limit?)` | 关键词搜索（标题/标签/关键词/描述/正文加权） | 否 |
+| `recommend_knowledge(task, types?, tags?, limit?)` | 按任务描述推荐候选 | 否 |
+| `list_knowledge(type?, tags?, offset?, limit?)` | 分页浏览目录 | 否 |
+| `get_knowledge(id, resource?)` | 取单个文档正文；技能包可再取单个子资源 | 是 |
 
-- `prompt`
+推荐用法：先 `recommend_knowledge`/`search_knowledge` 拿 3~5 条候选 → 选中最匹配的 id → `get_knowledge(id)`；技能正文若引用子资源，需要时才取 `get_knowledge(id, resource="references/xxx.md")`。
 
-- `workflow`
+## 部署模式速查
 
-- `template`
+| 场景 | 做法 |
+| --- | --- |
+| 一个人自己电脑用 | 本机 HTTP 常驻 + Windows 开机自启（下节），客户端填 `http://127.0.0.1:8765/mcp` |
+| 局域网/团队共用 | 服务器跑 `--host 0.0.0.0` 并放行端口；客户端填 `http://<内网IP>:8765/mcp` |
+| 公网共享 | 任意机器常驻 + 前面套**带鉴权的反向代理**（Nginx/Caddy）。⚠️ MVP 无内置鉴权 |
 
-- `rule`
+## Windows 开机自启动（推荐，个人电脑）
 
-`tags` 和 `keywords` 为可选字符串列表。其他任意 Front Matter 字段会保留在 `metadata` 中。整个仓库内 `id` 必须唯一。
+随登录在后台静默启动共享 HTTP 服务，客户端不用配 stdio。
 
-## CLI
-
-所有子命令前都可加 `--repo` 和 `--knowledge-dir`。
-
-```bash
-# 校验全部文件；存在校验错误时退出码为 1
-uv run skillhub --repo . validate
-
-# 搜索标题、标签、关键词、描述和正文
-uv run skillhub --repo . search "安全 review" --type skill --tag engineering --limit 5
-
-# 在当前 CLI 进程中强制全量重建索引
-uv run skillhub --repo . reindex
-
-# 显示数量统计、校验错误、索引时间与 Git 状态
-uv run skillhub --repo . status
+```powershell
+# 1. 新建 scripts\start-skillhub.vbs（路径换成你的）
+#    Set shell = CreateObject("WScript.Shell")
+#    shell.Run """D:\context-hub\scripts\start-skillhub-mcp.bat"" D:\my-skills 8765", 0, False
+# 2. 放入启动文件夹
+$startup = [Environment]::GetFolderPath('Startup')
+Copy-Item D:\context-hub\scripts\start-skillhub.vbs "$startup\SkillHub-MCP.vbs"
 ```
 
-## MCP 工具
+验证/管理：
 
-| 工具                    | 用途                      | 是否返回完整正文 |
-| --------------------- | ----------------------- | -------- |
-| `search_knowledge`    | 带类型/标签过滤的加权关键词搜索        | 否        |
-| `get_knowledge`       | 按精确 ID 获取，或获取技能包中的某个子资源 | 仅所选内容    |
-| `list_knowledge`      | 分页浏览目录                  | 否        |
-| `recommend_knowledge` | 依据任务描述对候选内容排序推荐         | 否        |
-
-搜索权重依次偏向 ID/标题、标签/关键词、描述，最后是正文。支持对英文类 token 以及中文单字/双字组合（bigram）建索引。这种确定性词法搜索对 MVP 已经足够，除 MCP SDK 外不引入额外部署依赖。
-
-获取技能包示例：
-
-```json
-{"id": "ai-native-prd"}
+```powershell
+Start-Process wscript.exe -ArgumentList '"D:\context-hub\scripts\start-skillhub.vbs"'
+Get-NetTCPConnection -LocalPort 8765 -State Listen     # 看到 LISTENING 即成功
+taskkill /PID <PID> /F                                  # 停服务（重启后自动再起）
 ```
 
-响应会包含主 `SKILL.md` 正文以及诸如 `references/writing-details.md` 的资源路径。只有当技能指令确实需要时才去加载单个资源：
+其他方式：任务计划程序（登录触发）、NSSM 注册 Windows 服务（无需登录、崩溃自动重启）。
 
-```json
-{"id": "ai-native-prd", "resource": "references/writing-details.md"}
-```
+## Trae：让 Agent 主动检索（路由技能）
 
-## 引擎与内容解耦：指向你自己的知识库
-
-SkillHub 的代码（引擎）与内容（`knowledge/`）是分离的：本仓库**不内置技能内容**（`knowledge/` 目录为空），clone 后请把服务指向你自己的知识库——任意一个含 `knowledge/` 目录的仓库或文件夹，包括你自己的私有知识库。
-
-三种指定方式（优先级：命令行参数 > 环境变量 > 默认值）：
-
-```bash
-# 1. 命令行参数
-uv run skillhub-mcp --repo /path/to/your-knowledge-repo
-
-# 2. 环境变量（不写 --repo / --knowledge-dir 时生效）
-set SKILLHUB_REPO=D:\your-knowledge-repo        # Windows PowerShell 用 $env:SKILLHUB_REPO=...
-set SKILLHUB_KNOWLEDGE_DIR=knowledge
-set SKILLHUB_TRANSPORT=streamable-http
-```
-
-```bash
-# 先校验你的内容是否合规
-uv run skillhub --repo /path/to/your-knowledge-repo validate
-```
-
-使用示例：本仓库 `scripts/start-skillhub-mcp.bat` 支持直接传入知识库路径启动共享 HTTP 服务：
+SkillHub 内容在 MCP 里，Trae 的 Agent 只有**先检索**才会发现你的技能。仓库附带的 `.trae/skills/skillhub-router/SKILL.md` 是一份"强制路由"技能，约定：**任何任务先 recommend/search 知识库，命中就按技能执行，内置技能只是后备**。
 
 ```text
-start-skillhub-mcp.bat                          # 默认用本仓库示例知识库
-start-skillhub-mcp.bat D:\MySkills\my-knowledge 8765
+让 Trae 使用它（任选）：
+A. 项目级：把 .trae/skills/skillhub-router/ 整个目录复制到目标项目根目录
+B. 全局级：复制到 Trae 全局技能目录（Windows CN: %USERPROFILE%\.trae-cn\skills\...）
+配置 MCP 后重启 Trae，让它重新扫描技能。
 ```
 
-注意：`knowledge/` 目录结构、`SKILL.md` Front Matter 字段与 ID 唯一性要求见 [docs/content-format.md](docs/content-format.md)。校验不通过的内容不会被索引。
+> 若 Agent 仍不主动检索，把该 SKILL.md 的内容做成 Trae 的「规则」（全量注入、每会话必读）即可，行为等同。
 
-## Agent 配置
+## 客户端接入参考
 
-将 `/ABSOLUTE/PATH/context-hub` 替换为本仓库的绝对路径，或替换为上文你自己的知识库路径。在 Windows 上，JSON 中可使用正斜杠，例如 `D:/projects/context-hub`。
+统一约定：`command` 启动的是**引擎**（context-hub），`--repo` 指向**你的知识库**。Windows 路径用正斜杠，如 `D:/my-skills`。
 
-### Claude Code
-
-项目级 `.mcp.json`：
+### Claude Code（项目 `.mcp.json` 或 `claude mcp add`）
 
 ```json
 {
@@ -216,165 +185,74 @@ start-skillhub-mcp.bat D:\MySkills\my-knowledge 8765
       "type": "stdio",
       "command": "uv",
       "args": [
-        "--directory",
-        "/ABSOLUTE/PATH/context-hub",
-        "run",
-        "skillhub-mcp",
-        "--repo",
-        "/ABSOLUTE/PATH/context-hub"
+        "--directory", "/path/to/context-hub",
+        "run", "skillhub-mcp",
+        "--repo", "/path/to/your-knowledge"
       ]
     }
   }
 }
 ```
 
-CLI 方式：
+> `--directory` 填引擎目录（context-hub），`--repo` 填你的知识库目录。JSON 不支持注释，复制时记得删掉说明文字。
 
-```bash
-claude mcp add --transport stdio skillhub -- uv --directory /ABSOLUTE/PATH/context-hub run skillhub-mcp --repo /ABSOLUTE/PATH/context-hub
-```
-
-### Codex
-
-将其加入 `~/.codex/config.toml`，或可信项目下的 `.codex/config.toml`：
+### Codex（`~/.codex/config.toml` 或项目 `.codex/config.toml`）
 
 ```toml
 [mcp_servers.skillhub]
 command = "uv"
-args = ["--directory", "/ABSOLUTE/PATH/context-hub", "run", "skillhub-mcp", "--repo", "/ABSOLUTE/PATH/context-hub"]
+args = ["--directory", "/path/to/context-hub", "run", "skillhub-mcp", "--repo", "/path/to/your-knowledge"]
 startup_timeout_sec = 20
 tool_timeout_sec = 60
 ```
 
-Codex CLI 方式：
-
-```bash
-codex mcp add skillhub -- uv --directory /ABSOLUTE/PATH/context-hub run skillhub-mcp --repo /ABSOLUTE/PATH/context-hub
-```
-
 ### Cursor
 
-使用项目内的 `.cursor/mcp.json`，或全局的 `~/.cursor/mcp.json`。其 JSON 内容与上方 Claude Code 的 stdio 配置相同。
+`.cursor/mcp.json`（项目）或 `~/.cursor/mcp.json`（全局），JSON 同上。
 
 ### Trae
 
-本仓库的 Trae 集成包含两部分：
+- HTTP 模式：**设置 → MCP → 添加 HTTP**，填 `http://127.0.0.1:8765/mcp`（最简单）
+- stdio / 项目级：项目根 `.trae/mcp.json`，JSON 同上（注意把 `--repo` 指向你的知识库）
 
-- `.trae/mcp.json`：用 `${workspaceFolder}` 启动本仓库的 MCP 服务器。
+各客户端现成模板见 [examples/mcp](examples/mcp)。
 
-- `.trae/skills/skillhub-router/SKILL.md`：告诉 Trae 何时以及如何渐进式地发现共享技能。
-
-克隆后在 Trae 中打开仓库根目录，安装 `uv`，并在 **设置 → MCP** 中启用 **项目级 MCP**。如果项目技能未能立即被发现，请重启 Trae。无需手工编辑绝对路径。
-
-若改用全局/手动配置，请打开 MCP 管理面板，选择原生 JSON 配置，填入 `examples/mcp/trae.json` 中的 stdio 配置并替换为本地绝对路径。
-
-可直接复制的配置模板见 [examples/mcp](examples/mcp)。
-
-想让**其他项目**也用同一套 SkillHub：把本仓库 `.trae/skills/skillhub-router/` 整个文件夹复制到目标项目根目录，并把 MCP 配置里的 `--repo` 指向你的知识库（或把它安装为 Trae 全局技能）。注意本仓库 `.trae/mcp.json` 的 `${workspaceFolder}` 指向本仓库，clone 后请改为你自己的知识库路径。
-
-### 一个共享的 HTTP 进程
-
-如果你希望所有 Agent 使用完全相同的常驻服务进程，按"快速开始"中的 HTTP 命令启动一次，然后配置为远程服务器：
-
-```json
-{
-  "mcpServers": {
-    "skillhub": {
-      "type": "http",
-      "url": "http://127.0.0.1:8765/mcp"
-    }
-  }
-}
-```
-
-Codex 使用：
-
-```toml
-[mcp_servers.skillhub]
-url = "http://127.0.0.1:8765/mcp"
-```
-
-客户端配置参考：[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Cursor MCP](https://prod.cursor.com/docs/mcp)、[Trae MCP](https://docs.trae.cn/ide_add-mcp-servers)。
-
-## Windows 开机自启动（共享 HTTP 模式）
-
-如果只是**自己一台电脑**使用，推荐跑一个随登录自启的共享 HTTP 服务（隐藏窗口），所有 Agent 填同一个网址即可，无需为每个客户端单独配置 stdio。
-
-### 第一步：准备
+## CLI 自查命令
 
 ```bash
-cd /d D:\context-hub          # 替换为你的引擎目录
-uv sync                       # 仅首次
+uv run skillhub --repo /path/to/knowledge validate   # 校验内容
+uv run skillhub --repo /path/to/knowledge search "发布" --tag 绘丹青 --limit 5
+uv run skillhub --repo /path/to/knowledge status      # 文档数/错误/索引时间/Git 状态
+uv run skillhub --repo /path/to/knowledge reindex     # 强制重建
 ```
 
-确认知识库目录存在（任意含 `knowledge/skills/` 的仓库/文件夹，如 `D:\my-skills`）。仓库自带的 [scripts/start-skillhub-mcp.bat](scripts/start-skillhub-mcp.bat) 接受 `[知识库路径] [端口]` 两个参数。
+## 常见问题（FAQ）
 
-### 第二步：创建静默启动脚本
+**Q：Agent 说没有相关技能 / 只看到内置技能，搜不到我的库？**
+A：先确认 MCP 面板里 `skillhub` 已连接且能看到 4 个工具（没有 → 重新粘贴配置并重启）；再确认服务启动时 `--repo` 指向了你的知识库且 `validate` 通过。内置技能 ≠ SkillHub，SkillHub 内容必须主动检索才可见（Trae 用路由技能解决"主动"问题）。
 
-新建 `scripts\start-skillhub.vbs`（把两处路径换成你自己的）：
+**Q：validate 报错 / 某些技能没被索引？**
+A：常见三类：frontmatter 必填字段缺失或含英文冒号未加引号；`name` 与叶子目录名不一致或重复；正文 `@references|scripts|templates/...` 引用了不存在的文件。逐个修好后再 validate。
 
-```vbs
-Set shell = CreateObject("WScript.Shell")
-shell.Run """D:\context-hub\scripts\start-skillhub-mcp.bat"" D:\my-skills 8765", 0, False
-```
+**Q：我改了知识库，服务要重启吗？**
+A：不用。文件监听会自动重建索引；`git pull` 更新文件同样会被感知。
 
-`0` 表示隐藏窗口，`False` 表示不等待脚本结束。
+**Q：端口被占用 / 起不来？**
+A：`Get-NetTCPConnection -LocalPort 8765 -State Listen` 查占用；换端口用 bat 第二个参数或 `--port`。
 
-### 第三步：放入"启动"文件夹（无需管理员）
+**Q：想换/加一个知识库？**
+A：改 `--repo`（或环境变量 `SKILLHUB_REPO` / `SKILLHUB_KNOWLEDGE_DIR` / `SKILLHUB_TRANSPORT`），重启服务即可。
 
-在 PowerShell 中执行：
-
-```powershell
-$startup = [Environment]::GetFolderPath('Startup')
-Copy-Item D:\context-hub\scripts\start-skillhub.vbs "$startup\SkillHub-MCP.vbs"
-```
-
-下次**登录 Windows 后**会自动在后台启动服务。立即验证：
-
-```powershell
-Start-Process wscript.exe -ArgumentList '"D:\context-hub\scripts\start-skillhub.vbs"'
-Get-NetTCPConnection -LocalPort 8765 -State Listen   # 看到 LISTENING 即成功
-```
-
-### 使用与维护
-
-所有 Agent 只配置一个 HTTP MCP：
-
-```json
-{ "mcpServers": { "skillhub": { "type": "http", "url": "http://127.0.0.1:8765/mcp" } } }
-```
-
-```powershell
-# 停掉服务（重启后会自动再起）
-taskkill /PID <PID> /F
-
-# 彻底取消开机自启
-Remove-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\SkillHub-MCP.vbs"
-```
-
-其他可选自启方式：任务计划程序（需管理员）、或用 NSSM 注册成 Windows 服务（无需登录即可运行、崩溃自动重启）。若要让局域网内其他机器访问，把 bat 参数中的 `--host` 改为 `0.0.0.0` 并放行防火墙端口。
-
-## 开发与验证
+## 开发与验证（维护者）
 
 ```bash
 uv run pytest
 uv run skillhub validate
-uv run skillhub search "release checklist"
+uv run python scripts/smoke_http.py --url http://127.0.0.1:8765/mcp --query "release"
 ```
 
-测试覆盖：WorkBuddy 兼容技能包、资源引用校验、重复 ID、中英文搜索、按阶段加载子资源、分页、读取时刷新、文件系统通知，以及真实的 MCP 协议调用。
+测试覆盖：WorkBuddy 技能包、资源引用校验、重复 ID、中英文搜索、子资源加载、分页、读取时刷新、文件系统监听、真实 MCP 协议调用。
 
-用官方 MCP 客户端对运行中的共享 HTTP 服务器做冒烟测试：
+## MVP 边界
 
-```bash
-uv run python scripts/smoke_http.py --url http://127.0.0.1:8765/mcp --query "code review"
-```
-
-## MVP 边界与下一步
-
-首个版本刻意不含编辑 API、鉴权、持久化索引、Embedding 和 Web 界面。合理的下一步顺序：
-
-1. 增加带鉴权的 HTTP 部署配置，以及健康检查/指标端点。
-2. 增加 Web 界面，可将审核通过的修改提交回 Git。
-3. 在 `KnowledgeIndex` 之后增加词法/向量混合索引，同时保持现有工具与 Markdown schema 稳定。
-
+当前版本不含：编辑 API、鉴权、持久化索引、Embedding/向量检索、Web 界面。合理的下一步：鉴权 HTTP 部署 → Web 编辑界面 → 词法/向量混合索引。架构与文档见 [docs/architecture.md](docs/architecture.md)。
