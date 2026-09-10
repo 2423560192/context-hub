@@ -182,6 +182,31 @@ Get-NetTCPConnection -LocalPort 8765 -State Listen     # 看到 LISTENING 即成
 taskkill /PID <PID> /F                                  # 停服务（重启后自动再起）
 ```
 
+### 崩溃自愈（看门狗，推荐）
+
+开机自启只保证"登录时拉起一次"；若进程之后退出且无人接管，服务会一直断。仓库自带看门狗脚本，服务掉线后自动复活，且**全程无弹窗**：
+
+- `scripts/watchdog-skillhub.ps1`：检查 8765 是否在监听，未监听则静默拉起服务（含 1 分钟防抖，避免并发重复启动）；
+- `scripts/watchdog-skillhub.vbs`：用 wscript 静默调用上面的脚本，不弹控制台窗口。
+
+注册为计划任务（每 2 分钟自检一次）：
+
+```powershell
+schtasks /Create /F /TN "SkillHub-Watchdog" `
+  /TR "wscript.exe //B //Nologo D:\context-hub\scripts\watchdog-skillhub.vbs" `
+  /SC MINUTE /MO 2
+```
+
+管理：
+
+```powershell
+schtasks /Query /TN "SkillHub-Watchdog" /FO LIST     # 查看状态与下次运行时间
+schtasks /Run   /TN "SkillHub-Watchdog"              # 立即自检一次
+schtasks /Delete /TN "SkillHub-Watchdog" /F          # 取消守护
+```
+
+> 务必用 wscript（或给 powershell 加 `-WindowStyle Hidden`）运行，否则计划任务每 2 分钟会闪一个控制台黑框。
+
 替代方案：任务计划程序（登录触发）或 NSSM 注册 Windows 服务（无需登录、崩溃自动重启）。
 
 ## 部署模式

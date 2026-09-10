@@ -66,7 +66,7 @@ The service is now at `http://127.0.0.1:8765/mcp`. Add an MCP server to any AI c
 
 Skills are directories under `knowledge/skills/{skill-name}/SKILL.md` (the directory name is the skill id; the engine ships a category skeleton you can drop skills into, or point `--repo` at your own knowledge repository). Ask your agent to `search_knowledge` first and `get_knowledge(id)` for the best match — a skill only becomes visible when actively retrieved.
 
-Client-specific configs (Claude Code / Codex / Cursor / Trae), the full CLI and MCP tool reference, Windows autostart and FAQs: [doc/doc.md](doc/doc.md). Skill format spec: [docs/content-format.md](docs/content-format.md).
+Client-specific configs (Claude Code / Codex / Cursor / Trae), the full CLI and MCP tool reference, Windows autostart and FAQs: [doc/doc.md](doc/doc.md). Skill format spec: [docs/content-format.md](docs/content-format.md). For unattended machines, a bundled watchdog (scheduled task, no console popups) restarts the shared HTTP server within two minutes if it ever dies.
 
 ## Architecture
 

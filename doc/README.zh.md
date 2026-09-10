@@ -59,7 +59,7 @@ uv run skillhub-mcp --repo . --transport streamable-http --port 8765
 
 技能放在 `knowledge/skills/{技能名}/SKILL.md`（目录名就是技能 id；引擎自带分类骨架可直接放，也可把 `--repo` 指向你自己的知识库仓库）。让 Agent 先 `search_knowledge` 检索、再对最佳命中的 id 调 `get_knowledge(id)`——技能只有被主动检索到才会可见。
 
-各客户端接入（Claude Code / Codex / Cursor / Trae）、CLI 与 MCP 工具完整参考、Windows 自启与 FAQ：见 [doc.zh.md](doc.zh.md)。技能格式规范：[../docs/content-format.md](../docs/content-format.md)。
+各客户端接入（Claude Code / Codex / Cursor / Trae）、CLI 与 MCP 工具完整参考、Windows 自启与 FAQ：见 [doc.zh.md](doc.zh.md)。技能格式规范：[../docs/content-format.md](../docs/content-format.md)。无人值守场景下，仓库自带看门狗（计划任务、无弹窗）可在服务掉线后 2 分钟内自动拉起。
 
 ## 架构
 

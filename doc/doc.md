@@ -182,6 +182,31 @@ Get-NetTCPConnection -LocalPort 8765 -State Listen     # LISTENING = success
 taskkill /PID <PID> /F                                  # stop; restarts at next logon
 ```
 
+### Crash self-healing (watchdog, recommended)
+
+Autostart only guarantees one launch at logon; if the process exits later, the service stays down until the next logon. The bundled watchdog brings it back automatically, with **no console windows flashing**:
+
+- `scripts/watchdog-skillhub.ps1` — checks whether port 8765 is listening and silently starts the service if not (with a 1-minute debounce against concurrent double-starts);
+- `scripts/watchdog-skillhub.vbs` — invokes the script above through wscript, so no console window ever appears.
+
+Register it as a scheduled task (self-check every 2 minutes):
+
+```powershell
+schtasks /Create /F /TN "SkillHub-Watchdog" `
+  /TR "wscript.exe //B //Nologo D:\context-hub\scripts\watchdog-skillhub.vbs" `
+  /SC MINUTE /MO 2
+```
+
+Manage:
+
+```powershell
+schtasks /Query /TN "SkillHub-Watchdog" /FO LIST     # status and next run time
+schtasks /Run   /TN "SkillHub-Watchdog"              # self-check once, right now
+schtasks /Delete /TN "SkillHub-Watchdog" /F          # remove the watchdog
+```
+
+> Always run it through wscript (or add `-WindowStyle Hidden` to powershell), otherwise the scheduled task flashes a console window every 2 minutes.
+
 Alternatives: Task Scheduler (logon trigger) or NSSM as a Windows service (no logon needed, crash auto-restart).
 
 ## Deployment Modes
